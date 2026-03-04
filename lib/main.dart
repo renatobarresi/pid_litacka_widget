@@ -6,17 +6,34 @@ import 'dart:async';
 
 const STOPS_URL = 'https://data.pid.cz/stops/json/stops.json';
 // Todo: Read API from a config file
-const API_KEY = "YOUR_KEY";
+const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjQxMCwiaWF0IjoxNzA2NTM1Nzk1LCJleHAiOjExNzA2NTM1Nzk1LCJpc3MiOiJnb2xlbWlvIiwianRpIjoiNTBhNzE2NzYtY2RlNC00NDZlLTg0YjItYjkyZTRlYzQ5OTcyIn0.h81f1HJ2Q398Ru4ZOGqqZ1F5kYMGAAWMEUVv5ZH99dQ";
 const API_URL = "https://api.golemio.cz/v2";
 const API_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'X-Access-Token': API_KEY
 };
 
+const NUMBER_OF_STOPS_TO_SHOW = 3; // Show next 3 stops for each station
+const NUMBER_OF_WIDGET_ROWS_PER_STATION = 5; // Rows shown per station in Android widget
+
+const STATION_ONE_NAME = "Ujezd A (Svandolo Divadlo)";
+const STATION_TWO_NAME = "Ujezd B (Narodni Divadlo)";
+const STATION_THREE_NAME = "Ujezd D (Svandolo Divadlo)";
+
 const STATION_ONE_ID = "U809Z1P";
 const STATION_TWO_ID = "U809Z2P";
 const STATION_THREE_ID = "U809Z4P";
 const TIME_LIMIT_TILL_ARRIVAL = 10; // Show trams arriving within 10 minutes
+
+// The passing string to the homewidget should be "station_num_1, arriving_tram_data_num_1"
+const String HOME_WIDGET_TRAM_DATA = "arriving_tram_data_num_";
+const String HOME_WIDGET_STATION_NUM = "station_num_";
+
+const List<Map<String, String>> STATIONS_LIST = [
+  {'id': STATION_ONE_ID, 'name': STATION_ONE_NAME},
+  {'id': STATION_TWO_ID, 'name': STATION_TWO_NAME},
+  {'id': STATION_THREE_ID, 'name': STATION_THREE_NAME},
+];
 
 class Stop {
   final String? stopName;
@@ -43,57 +60,6 @@ class ArrivalMetadata
 
 class PID {
 
-  /// Fetch stops from API and return a list of stop details filtered by zone_id = "P".
-  // Future<List<Stop>> getAllStops({String? stopName}) async {
-  //   try {
-  //     final uri = Uri.parse('$API_URL/gtfs/stops').replace(
-  //       queryParameters: stopName != null && stopName.isNotEmpty ? {'names': stopName} : {},
-  //     );
-  //     final resp = await http.get(uri, headers: API_HEADERS).timeout(const Duration(seconds: 5));
-  //     if (resp.statusCode != 200) {
-  //       print('getAllStops HTTP ${resp.statusCode}');
-  //       return [];
-  //     }
-  //     print('getAllStops response: ${resp.body}');
-  //     final jsonString = utf8.decode(resp.bodyBytes);
-  //     final decoded = jsonDecode(jsonString);
-
-  //     final List<Stop> stopsList = [];
-      
-  //     // Handle features array
-  //     if (decoded is Map<String, dynamic> && decoded['features'] is List) {
-  //       final features = decoded['features'] as List<dynamic>;
-  //       for (final stop in features) {
-  //         final Map<String, dynamic> properties = 
-  //             (stop is Map<String, dynamic> && stop['properties'] is Map<String, dynamic>)
-  //                 ? (stop['properties'] as Map<String, dynamic>)
-  //                 : (stop is Map<String, dynamic> ? stop : <String, dynamic>{});
-
-  //         // Filter by zone_id = "P"
-  //         final zoneId = properties['zone_id']?.toString();
-  //         if (zoneId != 'P') continue;
-
-  //         final name = properties['stop_name']?.toString();
-  //         final id = properties['stop_id']?.toString();
-  //         final platformCode = properties['platform_code']?.toString();
-
-  //         if (name != null && name.isNotEmpty && id != null && id.isNotEmpty) {
-  //           stopsList.add(Stop(
-  //             stopName: name,
-  //             stopId: id,
-  //             platformCode: platformCode,
-  //           ));
-  //         }
-  //       }
-  //     }
-
-  //     return stopsList;
-  //   } catch (e) {
-  //     print('Error fetching stops: $e');
-  //     return [];
-  //   }
-  // }
-
   Future<List<ArrivalMetadata>> getArrivalsForStop(String stopID, int minutesBefore, int minutesAfter) async
   {
     final List<ArrivalMetadata> arrivals = [];
@@ -102,7 +68,7 @@ class PID {
       final url = Uri.parse('$API_URL/pid/departureboards').replace(
         queryParameters: {
           'ids': stopID,
-          'limit': '5',
+          'limit': NUMBER_OF_WIDGET_ROWS_PER_STATION.toString(),
           'minutesBefore': minutesBefore.toString(),
           'minutesAfter': minutesAfter.toString(),
           'mode': 'arrivals',
@@ -110,11 +76,12 @@ class PID {
       );
       
       final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 5));
+      
       if (resp.statusCode != 200) {
         print('getArrivalsForStop HTTP ${resp.statusCode}');
         return [];
       }
-      // print('getArrivalsForStop response: ${resp.body}');
+
       final jsonString = utf8.decode(resp.bodyBytes);
       final boardData = jsonDecode(jsonString) as Map<String, dynamic>;
       
@@ -124,15 +91,13 @@ class PID {
         final route = (departure is Map<String, dynamic>) ? departure['route'] as Map<String, dynamic>? : null;
         final departureTimestamp = (departure is Map<String, dynamic>) ? departure['departure_timestamp'] as Map<String, dynamic>? : null;
         
-        final tramNumber = route?['short_name']?.toString()??'';
-        final minutesUntilArrival = departureTimestamp?['minutes'];
+        final tramNumber = route?['short_name']?.toString() ?? '';
+        final minutesUntilArrival = departureTimestamp?['minutes']?.toString() ?? '';
         
-        // if (tramNumber != null && minutesUntilArrival != null && minutesUntilArrival is int) {
-          arrivals.add(ArrivalMetadata(
-            arrivingInMinutes: minutesUntilArrival,
-            tramNumber: tramNumber,
-          ));
-        // }
+        arrivals.add(ArrivalMetadata(
+          arrivingInMinutes: minutesUntilArrival,
+          tramNumber: tramNumber,
+        ));
       }
       
       return arrivals;
@@ -157,35 +122,29 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   bool _loading = true;
   String? _error;
-  List<ArrivalMetadata> _arrivals = [];
+  Map<String, List<ArrivalMetadata>> _arrivalsByStation = {};
   late Timer _timer;
 
   // Home widget configuration
-  String appGroupId = 'group.cz.renato.tram_alert';
-  String androidWidgetName = 'TramAlertWidget';
-  String iosWidgetName = 'TramAlertWidget';
-  String tramData_1 = "arriving_Trams_1";
-  String tramData_2 = "arriving_Trams_2";
-  String tramData_3 = "arriving_Trams_3";
-  String tramData_4 = "arriving_Trams_4";
-
-  int counter = 1;
+  final String _appGroupId = 'group.cz.renato.tram_alert';
+  final String _androidWidgetName = 'TramAlertWidget';
+  final String _iosWidgetName = 'TramAlertWidget';
 
   @override
   void initState() {
     super.initState();
     _initializeApp();
 
-    HomeWidget.setAppGroupId(appGroupId);
+    HomeWidget.setAppGroupId(_appGroupId);
   }
 
   Future<void> _initializeApp() async {
     try {
       // Print configuration
       print('Station IDs:');
-      print('  STATION_ONE_ID: $STATION_ONE_ID');
-      print('  STATION_TWO_ID: $STATION_TWO_ID');
-      print('  STATION_THREE_ID: $STATION_THREE_ID');
+      for (final station in STATIONS_LIST) {
+        print('  ${station['name']}: ${station['id']}');
+      }
       print('Time limit till arrival: $TIME_LIMIT_TILL_ARRIVAL minutes');
       
       if (!mounted) {
@@ -212,33 +171,58 @@ class _MainAppState extends State<MainApp> {
   }
 
   Future<void> _fetchArrivals() async {
-    try {
-      final arrivals = await PID().getArrivalsForStop(
-        STATION_ONE_ID,
-        0,
-        TIME_LIMIT_TILL_ARRIVAL,
-      );
+      final Map<String, List<ArrivalMetadata>> updatedArrivals = {};
+
+      for (var stopsIndex = 0; stopsIndex < STATIONS_LIST.length; stopsIndex++) {
+        try {
+          final station = STATIONS_LIST[stopsIndex];
+          final stationId = station['id'];
+
+          if (stationId == null || stationId.isEmpty) {
+            continue;
+          }
+
+          // Get the arrivals for the current stop
+          final arrivals = await PID().getArrivalsForStop(
+            stationId,
+            0,
+            TIME_LIMIT_TILL_ARRIVAL,
+          );
+
+          updatedArrivals[stationId] = arrivals;
+
+          // Save station name to widget
+          final stationName = station['name'] ?? 'Unknown';
+          await HomeWidget.saveWidgetData('station_name_${stopsIndex + 1}', stationName);
+
+          // Update home widget data for the current stop
+          for (var tramData = 0; tramData < NUMBER_OF_WIDGET_ROWS_PER_STATION; tramData++) {
+            final tramArrivalParsedData = arrivals.length > tramData
+                ? 'Tram ${arrivals[tramData].tramNumber} in ${arrivals[tramData].arrivingInMinutes} min'
+                : '';
+
+            final widgetKey =
+                '$HOME_WIDGET_STATION_NUM${stopsIndex + 1},$HOME_WIDGET_TRAM_DATA${tramData + 1}';
+
+            await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
+          }
+        } catch (e) {
+          print('Error fetching arrivals: $e');
+        }
+      }
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _arrivals = arrivals;
+        _arrivalsByStation = updatedArrivals;
       });
 
-      // Update home widget with new arrivals
-      String arrivalText = arrivals.isEmpty
-          ? 'No trams arriving'
-          : 'Tram ${arrivals.first.tramNumber} in ${arrivals.first.arrivingInMinutes} min';
-      print("Updating widget with arrivals:\n$arrivalText");
-      // counter++;
-      await HomeWidget.saveWidgetData(tramData_1, arrivalText);
-      await HomeWidget.updateWidget(androidName: androidWidgetName, iOSName: iosWidgetName,);
-
-    } catch (e) {
-      print('Error fetching arrivals: $e');
-    }
+      await HomeWidget.updateWidget(
+        androidName: _androidWidgetName,
+        iOSName: _iosWidgetName,
+      );
   }
 
   @override
@@ -250,55 +234,77 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: _loading
-            ? Column(
+      body: _loading
+          ? Center(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: const [
                   CircularProgressIndicator(),
                   SizedBox(height: 12),
                   Text('Loading...'),
                 ],
-              )
-            : _error != null
-                ? Column(
+              ),
+            )
+          : _error != null
+              ? Center(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('Error: $_error'),
                     ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('Configuration:'),
                       const SizedBox(height: 12),
-                      Text('Station 1: $STATION_ONE_ID'),
-                      Text('Station 2: $STATION_TWO_ID'),
-                      Text('Station 3: $STATION_THREE_ID'),
+                      ...STATIONS_LIST.asMap().entries.map(
+                        (entry) => Text(
+                          'Station ${entry.key + 1}: ${entry.value['name']} (${entry.value['id']})',
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Text('Time limit: $TIME_LIMIT_TILL_ARRIVAL minutes'),
                       const SizedBox(height: 24),
-                      // Arrivals board for Station One
-                      Column(
-                        children: [
-                          Text('Station 1 - $STATION_ONE_ID',
-                              style: Theme.of(context).textTheme.headlineSmall),
-                          const SizedBox(height: 12),
-                          if (_arrivals.isEmpty)
-                            const Text('No trams arriving')
-                          else
-                            Column(
-                              children: _arrivals
-                                  .map((arrival) => Text(
-                                        'Tram ${arrival.tramNumber} arriving in ${arrival.arrivingInMinutes} minutes',
-                                      ))
-                                  .toList(),
-                            ),
-                        ],
-                      ),
+                      ...STATIONS_LIST.asMap().entries.map((entry) {
+                        final station = entry.value;
+                        final stationId = station['id'] ?? '';
+                        final stationName = station['name'] ?? 'Unknown station';
+                        final stationArrivals = _arrivalsByStation[stationId] ?? [];
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Station ${entry.key + 1} - $stationName',
+                                style: Theme.of(context).textTheme.headlineSmall,
+                              ),
+                              Text(stationId),
+                              const SizedBox(height: 12),
+                              if (stationArrivals.isEmpty)
+                                const Text('No trams arriving')
+                              else
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: stationArrivals
+                                      .take(NUMBER_OF_STOPS_TO_SHOW)
+                                      .map((arrival) => Text(
+                                            'Tram ${arrival.tramNumber} arriving in ${arrival.arrivingInMinutes} minutes',
+                                          ))
+                                      .toList(),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
-      ),
+                ),
     );
   }
 }

@@ -4,16 +4,216 @@
     android:layout_height="match_parent"
     android:theme="@style/Theme.Android.AppWidgetContainer">
 
-    <TextView
-        android:id="@+id/text_id"
-        style="@style/Widget.Android.AppWidget.InnerView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerHorizontal="true"
-        android:layout_centerVertical="true"
-        android:layout_margin="8dp"
-        android:contentDescription="@string/appwidget_text"
-        android:text="@string/appwidget_text"
-        android:textSize="24sp"
-        android:textStyle="bold|italic" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/station_name_1_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Station 1"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tram_no_1_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_2_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_3_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_4_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_5_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/station_name_2_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:text="Station 2"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_6_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_7_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_8_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_9_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_10_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/station_name_3_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:text="Station 3"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_11_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_12_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_13_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_14_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tram_no_15_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="TextView"
+            android:textAlignment="center"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
 </RelativeLayout>

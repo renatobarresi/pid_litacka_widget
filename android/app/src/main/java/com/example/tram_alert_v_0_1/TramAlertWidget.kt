@@ -10,6 +10,15 @@ import es.antonborri.home_widget.HomeWidgetPlugin
  * Implementation of App Widget functionality.
  */
 class TramAlertWidget : AppWidgetProvider() {
+    companion object {
+        private const val STATION_COUNT = 3
+        private const val WIDGET_ROWS_PER_STATION = 5
+    }
+
+    private fun tramDataKey(stationNumber: Int, tramNumber: Int): String {
+        return "station_num_${stationNumber},arriving_tram_data_num_${tramNumber}"
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -19,8 +28,45 @@ class TramAlertWidget : AppWidgetProvider() {
         for (appWidgetId in appWidgetIds) {
             val widgetData = HomeWidgetPlugin.getData(context)
             val views = RemoteViews(context.packageName, R.layout.tram_alert_widget).apply {
-                val textFromFlutterApp = widgetData.getString("arriving_Trams_1", null)
-                setTextViewText(R.id.text_id, textFromFlutterApp ?: "No tram data..")
+                // Set station names
+                for (station in 1..STATION_COUNT) {
+                    val stationName = widgetData.getString("station_name_$station", null)
+                    val stationNameId = when (station) {
+                        1 -> R.id.station_name_1_id
+                        2 -> R.id.station_name_2_id
+                        3 -> R.id.station_name_3_id
+                        else -> R.id.station_name_1_id
+                    }
+                    setTextViewText(stationNameId, stationName ?: "Station $station")
+                }
+
+                val rowIds = listOf(
+                    R.id.tram_no_1_id,
+                    R.id.tram_no_2_id,
+                    R.id.tram_no_3_id,
+                    R.id.tram_no_4_id,
+                    R.id.tram_no_5_id,
+                    R.id.tram_no_6_id,
+                    R.id.tram_no_7_id,
+                    R.id.tram_no_8_id,
+                    R.id.tram_no_9_id,
+                    R.id.tram_no_10_id,
+                    R.id.tram_no_11_id,
+                    R.id.tram_no_12_id,
+                    R.id.tram_no_13_id,
+                    R.id.tram_no_14_id,
+                    R.id.tram_no_15_id,
+                )
+
+                for (rowIndex in rowIds.indices) {
+                    val stationNumber = (rowIndex / WIDGET_ROWS_PER_STATION) + 1
+                    val tramNumber = (rowIndex % WIDGET_ROWS_PER_STATION) + 1
+                    val tramText = widgetData.getString(tramDataKey(stationNumber, tramNumber), null)
+                    setTextViewText(
+                        rowIds[rowIndex],
+                        tramText ?: ""
+                    )
+                }
             }
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -44,7 +90,7 @@ internal fun updateAppWidget(
     val widgetText = context.getString(R.string.appwidget_text)
     // Construct the RemoteViews object
     val views = RemoteViews(context.packageName, R.layout.tram_alert_widget)
-    views.setTextViewText(R.id.text_id, widgetText)
+    views.setTextViewText(R.id.tram_no_1_id, widgetText)
 
     // Instruct the widget manager to update the widget
     appWidgetManager.updateAppWidget(appWidgetId, views)
