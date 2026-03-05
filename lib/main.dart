@@ -58,6 +58,8 @@ class ArrivalMetadata
   });
 }
 
+bool widgetUpdateRequested = false;
+
 class PID {
 
   Future<List<ArrivalMetadata>> getArrivalsForStop(String stopID, int minutesBefore, int minutesAfter) async
@@ -123,17 +125,27 @@ void main() async {
 @pragma('vm:entry-point')
 Future<void> interactiveCallback(Uri? uri) async {
   
-  print('Background callback triggered - updating widget data');
+  print('Background callback triggered - updating widget data jejeje');
   
   if (uri?.host == 'refresh') {
-    await _updateWidgetInBackground();
+    print("refresh action received from widget - setting flag to true");
+    //await _updateWidgetInBackground();
+    widgetUpdateRequested = true;
   }
 }
 
 /// Updates widget data in background without opening the app
-Future<void> _updateWidgetInBackground() async {
+Future<void> _updateWidget() async {
   String? errorMessage;
-  
+  if (widgetUpdateRequested == false)
+  {
+    return;
+  }
+  else
+  {
+    print("Widget update requested - fetching new data");
+    widgetUpdateRequested = false;
+  }
   try {
     final pid = PID();
     
@@ -164,7 +176,7 @@ Future<void> _updateWidgetInBackground() async {
         for (var tramData = 0; tramData < NUMBER_OF_WIDGET_ROWS_PER_STATION; tramData++) {
           final tramArrivalParsedData = arrivals.length > tramData
               ? 'Tram ${arrivals[tramData].tramNumber} in ${arrivals[tramData].arrivingInMinutes} min'
-              : '';
+              : 'Unable to fetch data';
 
           final widgetKey =
               '$HOME_WIDGET_STATION_NUM${stopsIndex + 1},$HOME_WIDGET_TRAM_DATA${tramData + 1}';
@@ -182,13 +194,6 @@ Future<void> _updateWidgetInBackground() async {
     final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     await HomeWidget.saveWidgetData('last_updated_time', formattedTime);
 
-    // Save error message if any
-    if (errorMessage != null) {
-      await HomeWidget.saveWidgetData('error_message', errorMessage);
-    } else {
-      await HomeWidget.saveWidgetData('error_message', 'Fetch OK');
-    }
-
     // Update widget display
     await HomeWidget.updateWidget(
       androidName: 'TramAlertWidget',
@@ -198,11 +203,6 @@ Future<void> _updateWidgetInBackground() async {
     print('Background update complete');
   } catch (e) {
     print('Fatal error in background update: $e');
-    await HomeWidget.saveWidgetData('error_message', 'Fatal: $e');
-    await HomeWidget.updateWidget(
-      androidName: 'TramAlertWidget',
-      iOSName: 'TramAlertWidget',
-    );
   }
 }
 /**
@@ -250,17 +250,23 @@ class _MainAppState extends State<MainApp> {
         _loading = false;
       });
 
+      _timer = Timer.periodic(Duration(seconds: 1), (_) {
+        _updateWidget();
+      });
+      
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
+
     }
   }
 
   @override
   void dispose() {
+    _timer.cancel();
     super.dispose();
   }
 

@@ -2,12 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- REQUIRED for any HTTP/HTTPS -->
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- REQUIRED for network state -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- REQUIRED for widget updates -->
-    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
     <!-- REQUIRED for background operations -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

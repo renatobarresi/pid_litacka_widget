@@ -75,8 +75,8 @@ class TramAlertWidget : HomeWidgetProvider() {
                 setTextViewText(R.id.last_updated_time_id, timeDataWasFetched ?: "")
 
                 // Get and display error message if any
-                val errorMessage = widgetData.getString("error_message", null)
-                setTextViewText(R.id.error_message_id, errorMessage ?: "")
+                //val errorMessage = widgetData.getString("error_message", null)
+                //setTextViewText(R.id.error_message_id, errorMessage ?: "")
 
                 // Set button click to trigger background callback
                 val refreshIntent = HomeWidgetBackgroundIntent.getBroadcast(
