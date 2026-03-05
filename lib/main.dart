@@ -16,9 +16,9 @@ const API_HEADERS = {
 const NUMBER_OF_STOPS_TO_SHOW = 3; // Show next 3 stops for each station
 const NUMBER_OF_WIDGET_ROWS_PER_STATION = 5; // Rows shown per station in Android widget
 
-const STATION_ONE_NAME = "Ujezd A (Svandolo Divadlo)";
-const STATION_TWO_NAME = "Ujezd B (Narodni Divadlo)";
-const STATION_THREE_NAME = "Ujezd D (Svandolo Divadlo)";
+const STATION_ONE_NAME = "Ujezd Dir: South";
+const STATION_TWO_NAME = "Ujezd Dir: North";
+const STATION_THREE_NAME = "Ujezd Dir: South";
 
 const STATION_ONE_ID = "U809Z1P";
 const STATION_TWO_ID = "U809Z2P";
@@ -31,8 +31,8 @@ const String HOME_WIDGET_STATION_NUM = "station_num_";
 
 const List<Map<String, String>> STATIONS_LIST = [
   {'id': STATION_ONE_ID, 'name': STATION_ONE_NAME},
-  {'id': STATION_TWO_ID, 'name': STATION_TWO_NAME},
   {'id': STATION_THREE_ID, 'name': STATION_THREE_NAME},
+  {'id': STATION_TWO_ID, 'name': STATION_TWO_NAME},
 ];
 
 class Stop {
@@ -108,10 +108,108 @@ class PID {
   }
 }
 
-void main() {
+/**
+ * Main app widget that displays the arrival times for the configured stations and updates the home screen widget data.
+ */
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
+  await HomeWidget.registerInteractivityCallback(interactiveCallback);
   runApp(MaterialApp(home: MainApp()));
 }
 
+/// Static callback for widget interactivity
+/// Must be static and public to be called by the platform
+@pragma('vm:entry-point')
+Future<void> interactiveCallback(Uri? uri) async {
+  
+  print('Background callback triggered - updating widget data');
+  
+  if (uri?.host == 'refresh') {
+    await _updateWidgetInBackground();
+  }
+}
+
+/// Updates widget data in background without opening the app
+Future<void> _updateWidgetInBackground() async {
+  String? errorMessage;
+  
+  try {
+    final pid = PID();
+    
+    for (var stopsIndex = 0; stopsIndex < STATIONS_LIST.length; stopsIndex++) {
+      final station = STATIONS_LIST[stopsIndex];
+      final stationId = station['id'];
+
+      if (stationId == null || stationId.isEmpty) {
+        continue;
+      }
+
+      print('Background fetch: Fetching arrivals for ${station['name']}');
+
+      try {
+        final arrivals = await pid.getArrivalsForStop(
+          stationId,
+          0,
+          TIME_LIMIT_TILL_ARRIVAL,
+        );
+
+        print('Background fetch: Got ${arrivals.length} arrivals');
+
+        // Save station name
+        final stationName = station['name'] ?? 'Unknown';
+        await HomeWidget.saveWidgetData('station_name_${stopsIndex + 1}', stationName);
+
+        // Save tram arrival data
+        for (var tramData = 0; tramData < NUMBER_OF_WIDGET_ROWS_PER_STATION; tramData++) {
+          final tramArrivalParsedData = arrivals.length > tramData
+              ? 'Tram ${arrivals[tramData].tramNumber} in ${arrivals[tramData].arrivingInMinutes} min'
+              : '';
+
+          final widgetKey =
+              '$HOME_WIDGET_STATION_NUM${stopsIndex + 1},$HOME_WIDGET_TRAM_DATA${tramData + 1}';
+
+          await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
+        }
+      } catch (stationError) {
+        errorMessage = 'Error: $stationError';
+        print('Background fetch error: $errorMessage');
+      }
+    }
+
+    // Save refresh timestamp
+    final now = DateTime.now();
+    final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    await HomeWidget.saveWidgetData('last_updated_time', formattedTime);
+
+    // Save error message if any
+    if (errorMessage != null) {
+      await HomeWidget.saveWidgetData('error_message', errorMessage);
+    } else {
+      await HomeWidget.saveWidgetData('error_message', 'Fetch OK');
+    }
+
+    // Update widget display
+    await HomeWidget.updateWidget(
+      androidName: 'TramAlertWidget',
+      iOSName: 'TramAlertWidget',
+    );
+
+    print('Background update complete');
+  } catch (e) {
+    print('Fatal error in background update: $e');
+    await HomeWidget.saveWidgetData('error_message', 'Fatal: $e');
+    await HomeWidget.updateWidget(
+      androidName: 'TramAlertWidget',
+      iOSName: 'TramAlertWidget',
+    );
+  }
+}
+/**
+ * MainApp is a stateful widget that manages the state of the application, including loading status, error handling,
+ * and arrival data for each station. It initializes the app, fetches arrival data periodically,
+ * and updates the home screen widget with the latest information.
+ */
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
@@ -134,8 +232,6 @@ class _MainAppState extends State<MainApp> {
   void initState() {
     super.initState();
     _initializeApp();
-
-    HomeWidget.setAppGroupId(_appGroupId);
   }
 
   Future<void> _initializeApp() async {
@@ -154,13 +250,6 @@ class _MainAppState extends State<MainApp> {
         _loading = false;
       });
 
-      // Start timer to update arrivals every 10 seconds
-      _timer = Timer.periodic(Duration(seconds: 10), (_) {
-        _fetchArrivals();
-      });
-
-      // Fetch arrivals immediately
-      await _fetchArrivals();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -170,64 +259,8 @@ class _MainAppState extends State<MainApp> {
     }
   }
 
-  Future<void> _fetchArrivals() async {
-      final Map<String, List<ArrivalMetadata>> updatedArrivals = {};
-
-      for (var stopsIndex = 0; stopsIndex < STATIONS_LIST.length; stopsIndex++) {
-        try {
-          final station = STATIONS_LIST[stopsIndex];
-          final stationId = station['id'];
-
-          if (stationId == null || stationId.isEmpty) {
-            continue;
-          }
-
-          // Get the arrivals for the current stop
-          final arrivals = await PID().getArrivalsForStop(
-            stationId,
-            0,
-            TIME_LIMIT_TILL_ARRIVAL,
-          );
-
-          updatedArrivals[stationId] = arrivals;
-
-          // Save station name to widget
-          final stationName = station['name'] ?? 'Unknown';
-          await HomeWidget.saveWidgetData('station_name_${stopsIndex + 1}', stationName);
-
-          // Update home widget data for the current stop
-          for (var tramData = 0; tramData < NUMBER_OF_WIDGET_ROWS_PER_STATION; tramData++) {
-            final tramArrivalParsedData = arrivals.length > tramData
-                ? 'Tram ${arrivals[tramData].tramNumber} in ${arrivals[tramData].arrivingInMinutes} min'
-                : '';
-
-            final widgetKey =
-                '$HOME_WIDGET_STATION_NUM${stopsIndex + 1},$HOME_WIDGET_TRAM_DATA${tramData + 1}';
-
-            await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
-          }
-        } catch (e) {
-          print('Error fetching arrivals: $e');
-        }
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _arrivalsByStation = updatedArrivals;
-      });
-
-      await HomeWidget.updateWidget(
-        androidName: _androidWidgetName,
-        iOSName: _iosWidgetName,
-      );
-  }
-
   @override
   void dispose() {
-    _timer.cancel();
     super.dispose();
   }
 
@@ -268,40 +301,7 @@ class _MainAppState extends State<MainApp> {
                       ),
                       const SizedBox(height: 12),
                       Text('Time limit: $TIME_LIMIT_TILL_ARRIVAL minutes'),
-                      const SizedBox(height: 24),
-                      ...STATIONS_LIST.asMap().entries.map((entry) {
-                        final station = entry.value;
-                        final stationId = station['id'] ?? '';
-                        final stationName = station['name'] ?? 'Unknown station';
-                        final stationArrivals = _arrivalsByStation[stationId] ?? [];
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Station ${entry.key + 1} - $stationName',
-                                style: Theme.of(context).textTheme.headlineSmall,
-                              ),
-                              Text(stationId),
-                              const SizedBox(height: 12),
-                              if (stationArrivals.isEmpty)
-                                const Text('No trams arriving')
-                              else
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: stationArrivals
-                                      .take(NUMBER_OF_STOPS_TO_SHOW)
-                                      .map((arrival) => Text(
-                                            'Tram ${arrival.tramNumber} arriving in ${arrival.arrivingInMinutes} minutes',
-                                          ))
-                                      .toList(),
-                                ),
-                            ],
-                          ),
-                        );
-                      }),
+                      const SizedBox(height: 24)
                     ],
                   ),
                 ),

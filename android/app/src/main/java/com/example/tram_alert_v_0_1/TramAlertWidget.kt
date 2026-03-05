@@ -1,15 +1,17 @@
 package com.example.tram_alert_v_0_1
 
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.SharedPreferences
+import android.net.Uri
 import android.widget.RemoteViews
-import es.antonborri.home_widget.HomeWidgetPlugin
+import es.antonborri.home_widget.HomeWidgetBackgroundIntent
+import es.antonborri.home_widget.HomeWidgetProvider
 
 /**
  * Implementation of App Widget functionality.
  */
-class TramAlertWidget : AppWidgetProvider() {
+class TramAlertWidget : HomeWidgetProvider() {
     companion object {
         private const val STATION_COUNT = 3
         private const val WIDGET_ROWS_PER_STATION = 5
@@ -22,11 +24,11 @@ class TramAlertWidget : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
+        appWidgetIds: IntArray,
+        widgetData: SharedPreferences
     ) {
         // There may be multiple widgets active, so update all of them
         for (appWidgetId in appWidgetIds) {
-            val widgetData = HomeWidgetPlugin.getData(context)
             val views = RemoteViews(context.packageName, R.layout.tram_alert_widget).apply {
                 // Set station names
                 for (station in 1..STATION_COUNT) {
@@ -64,9 +66,24 @@ class TramAlertWidget : AppWidgetProvider() {
                     val tramText = widgetData.getString(tramDataKey(stationNumber, tramNumber), null)
                     setTextViewText(
                         rowIds[rowIndex],
-                        tramText ?: ""
+                        tramText ?: "No data received from app"
                     )
                 }
+
+                // Get time data was fetched
+                val timeDataWasFetched = widgetData.getString("last_updated_time", null)
+                setTextViewText(R.id.last_updated_time_id, timeDataWasFetched ?: "")
+
+                // Get and display error message if any
+                val errorMessage = widgetData.getString("error_message", null)
+                setTextViewText(R.id.error_message_id, errorMessage ?: "")
+
+                // Set button click to trigger background callback
+                val refreshIntent = HomeWidgetBackgroundIntent.getBroadcast(
+                    context,
+                    Uri.parse("homeWidgetTramAlert://refresh")
+                )
+                setOnClickPendingIntent(R.id.button, refreshIntent)
             }
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -80,18 +97,4 @@ class TramAlertWidget : AppWidgetProvider() {
     override fun onDisabled(context: Context) {
         // Enter relevant functionality for when the last widget is disabled
     }
-}
-
-internal fun updateAppWidget(
-    context: Context,
-    appWidgetManager: AppWidgetManager,
-    appWidgetId: Int
-) {
-    val widgetText = context.getString(R.string.appwidget_text)
-    // Construct the RemoteViews object
-    val views = RemoteViews(context.packageName, R.layout.tram_alert_widget)
-    views.setTextViewText(R.id.tram_no_1_id, widgetText)
-
-    // Instruct the widget manager to update the widget
-    appWidgetManager.updateAppWidget(appWidgetId, views)
 }
