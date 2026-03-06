@@ -65,48 +65,62 @@ class PID {
   Future<List<ArrivalMetadata>> getArrivalsForStop(String stopID, int minutesBefore, int minutesAfter) async
   {
     final List<ArrivalMetadata> arrivals = [];
-    try {
-      // Fetch departure board data
-      final url = Uri.parse('$API_URL/pid/departureboards').replace(
-        queryParameters: {
-          'ids': stopID,
-          'limit': NUMBER_OF_WIDGET_ROWS_PER_STATION.toString(),
-          'minutesBefore': minutesBefore.toString(),
-          'minutesAfter': minutesAfter.toString(),
-          'mode': 'arrivals',
-        },
-      );
-      
-      final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 15));
-      
-      if (resp.statusCode != 200) {
-        print('getArrivalsForStop HTTP ${resp.statusCode}');
-        return [];
-      }
+    int retries = 3;
+    int delayMs = 1000;
+    
+    while (retries > 0) {
+      try {
+        // Fetch departure board data
+        final url = Uri.parse('$API_URL/pid/departureboards').replace(
+          queryParameters: {
+            'ids': stopID,
+            'limit': NUMBER_OF_WIDGET_ROWS_PER_STATION.toString(),
+            'minutesBefore': minutesBefore.toString(),
+            'minutesAfter': minutesAfter.toString(),
+            'mode': 'arrivals',
+          },
+        );
+        
+        final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 15));
+        
+        if (resp.statusCode != 200) {
+          print('getArrivalsForStop HTTP ${resp.statusCode}');
+          return [];
+        }
 
-      final jsonString = utf8.decode(resp.bodyBytes);
-      final boardData = jsonDecode(jsonString) as Map<String, dynamic>;
-      
-      // Parse departure board data
-      final departures = boardData['departures'] as List<dynamic>? ?? [];
-      for (final departure in departures) {
-        final route = (departure is Map<String, dynamic>) ? departure['route'] as Map<String, dynamic>? : null;
-        final departureTimestamp = (departure is Map<String, dynamic>) ? departure['departure_timestamp'] as Map<String, dynamic>? : null;
+        final jsonString = utf8.decode(resp.bodyBytes);
+        final boardData = jsonDecode(jsonString) as Map<String, dynamic>;
         
-        final tramNumber = route?['short_name']?.toString() ?? '';
-        final minutesUntilArrival = departureTimestamp?['minutes']?.toString() ?? '';
+        // Parse departure board data
+        final departures = boardData['departures'] as List<dynamic>? ?? [];
+        for (final departure in departures) {
+          final route = (departure is Map<String, dynamic>) ? departure['route'] as Map<String, dynamic>? : null;
+          final departureTimestamp = (departure is Map<String, dynamic>) ? departure['departure_timestamp'] as Map<String, dynamic>? : null;
+          
+          final tramNumber = route?['short_name']?.toString() ?? '';
+          final minutesUntilArrival = departureTimestamp?['minutes']?.toString() ?? '';
+          
+          arrivals.add(ArrivalMetadata(
+            arrivingInMinutes: minutesUntilArrival,
+            tramNumber: tramNumber,
+          ));
+        }
         
-        arrivals.add(ArrivalMetadata(
-          arrivingInMinutes: minutesUntilArrival,
-          tramNumber: tramNumber,
-        ));
+        return arrivals;
+      } catch (e) {
+        retries--;
+        if (retries > 0) {
+          print('Error fetching arrivals for stop $stopID (retry $retries): $e');
+          await Future.delayed(Duration(milliseconds: delayMs));
+          delayMs *= 2; // Exponential backoff
+        } else {
+          print('Error fetching arrivals for stop $stopID (final): $e');
+          return [];
+        }
       }
-      
-      return arrivals;
-    } catch (e) {
-      print('Error fetching arrivals for stop $stopID: $e');
-      return [];
     }
+    
+    return arrivals;
   }
 }
 
