@@ -8,8 +8,10 @@
     <!-- REQUIRED for widget updates -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
     <!-- REQUIRED for background operations -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>    <!-- REQUIRED for background network changes -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- REQUIRED for background execution to keep device awake -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />    
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

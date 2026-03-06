@@ -77,7 +77,7 @@ class PID {
         },
       );
       
-      final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 5));
+      final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 15));
       
       if (resp.statusCode != 200) {
         print('getArrivalsForStop HTTP ${resp.statusCode}');
