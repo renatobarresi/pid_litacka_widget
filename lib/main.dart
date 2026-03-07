@@ -3,6 +3,8 @@ import 'package:home_widget/home_widget.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import 'package:workmanager/workmanager.dart';
+import 'dart:io';
 
 const STOPS_URL = 'https://data.pid.cz/stops/json/stops.json';
 // Todo: Read API from a config file
@@ -69,6 +71,7 @@ class PID {
     int delayMs = 1000;
     
     while (retries > 0) {
+      print("Fetching arrivals for stop $stopID (attempt ${4 - retries}/3)");
       try {
         // Fetch departure board data
         final url = Uri.parse('$API_URL/pid/departureboards').replace(
@@ -100,6 +103,7 @@ class PID {
           final tramNumber = route?['short_name']?.toString() ?? '';
           final minutesUntilArrival = departureTimestamp?['minutes']?.toString() ?? '';
           
+          print("Tram $tramNumber in $minutesUntilArrival minutes at stop $stopID");
           arrivals.add(ArrivalMetadata(
             arrivingInMinutes: minutesUntilArrival,
             tramNumber: tramNumber,
@@ -124,42 +128,71 @@ class PID {
   }
 }
 
-/**
- * Main app widget that displays the arrival times for the configured stations and updates the home screen widget data.
- */
-void main() async {
+Future<bool> isNetworkReady() async {
+  try {
+    final result = await InternetAddress.lookup('google.com');
+    return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+  } catch (e) {
+    print('Network not ready yet: $e');
+    return false;
+  }
+}
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+
+    WidgetsFlutterBinding.ensureInitialized();
+
+    await HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
+
+    if (task == "refreshTrams") {
+      await _updateWidget();
+    }
+
+    return Future.value(true);
+  });
+}
+
+/// Main app widget that displays the arrival times for the configured stations and updates the home screen widget data.
+void main(){
   WidgetsFlutterBinding.ensureInitialized();
-  await HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
-  await HomeWidget.registerInteractivityCallback(interactiveCallback);
+  HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
+
+  Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: true,
+  );
+
+  HomeWidget.registerInteractivityCallback(interactiveCallback);
   runApp(MaterialApp(home: MainApp()));
 }
 
-/// Static callback for widget interactivity
-/// Must be static and public to be called by the platform
 @pragma('vm:entry-point')
 Future<void> interactiveCallback(Uri? uri) async {
   
   print('Background callback triggered - updating widget data jejeje');
   
   if (uri?.host == 'refresh') {
-    print("refresh action received from widget - setting flag to true");
-    //await _updateWidgetInBackground();
-    widgetUpdateRequested = true;
+    print("refresh action received from widget, calling...");
+
+    await Workmanager().registerOneOffTask(
+      DateTime.now().millisecondsSinceEpoch.toString(),
+      "refreshTrams",
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
   }
 }
 
 /// Updates widget data in background without opening the app
 Future<void> _updateWidget() async {
   String? errorMessage;
-  if (widgetUpdateRequested == false)
-  {
-    return;
+  bool flagFetch = false;
+
+  while(!await isNetworkReady()) {
+    await Future.delayed(const Duration(seconds: 1));
   }
-  else
-  {
-    print("Widget update requested - fetching new data");
-    widgetUpdateRequested = false;
-  }
+
   try {
     final pid = PID();
     
@@ -195,7 +228,17 @@ Future<void> _updateWidget() async {
           final widgetKey =
               '$HOME_WIDGET_STATION_NUM${stopsIndex + 1},$HOME_WIDGET_TRAM_DATA${tramData + 1}';
 
-          await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
+          if (tramArrivalParsedData == 'Unable to fetch data' && flagFetch == false) {
+            flagFetch = false;
+            print('Background fetch: No data for tram ${tramData + 1} at station ${station['name']}');
+          } else {
+            flagFetch = true;
+            print('Background fetch: Saving data for tram ${tramData + 1} at station ${station['name']}: $tramArrivalParsedData');
+          }
+
+          if (flagFetch) {
+            await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
+          }
         }
       } catch (stationError) {
         errorMessage = 'Error: $stationError';
@@ -204,9 +247,11 @@ Future<void> _updateWidget() async {
     }
 
     // Save refresh timestamp
-    final now = DateTime.now();
-    final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-    await HomeWidget.saveWidgetData('last_updated_time', formattedTime);
+    if (flagFetch) {
+      final now = DateTime.now();
+      final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      await HomeWidget.saveWidgetData('last_updated_time', formattedTime);
+    }
 
     // Update widget display
     await HomeWidget.updateWidget(
@@ -219,11 +264,9 @@ Future<void> _updateWidget() async {
     print('Fatal error in background update: $e');
   }
 }
-/**
- * MainApp is a stateful widget that manages the state of the application, including loading status, error handling,
- * and arrival data for each station. It initializes the app, fetches arrival data periodically,
- * and updates the home screen widget with the latest information.
- */
+/// MainApp is a stateful widget that manages the state of the application, including loading status, error handling,
+/// and arrival data for each station. It initializes the app, fetches arrival data periodically,
+/// and updates the home screen widget with the latest information.
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
@@ -234,7 +277,7 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   bool _loading = true;
   String? _error;
-  Map<String, List<ArrivalMetadata>> _arrivalsByStation = {};
+  final Map<String, List<ArrivalMetadata>> _arrivalsByStation = {};
   late Timer _timer;
 
   // Home widget configuration
@@ -263,10 +306,6 @@ class _MainAppState extends State<MainApp> {
       setState(() {
         _loading = false;
       });
-
-      _timer = Timer.periodic(Duration(seconds: 1), (_) {
-        _updateWidget();
-      });
       
     } catch (e) {
       if (!mounted) return;
@@ -280,7 +319,6 @@ class _MainAppState extends State<MainApp> {
 
   @override
   void dispose() {
-    _timer.cancel();
     super.dispose();
   }
 
