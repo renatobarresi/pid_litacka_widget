@@ -1,22 +1,62 @@
+
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:async';
+import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'pid_litacka_parser.dart';
 
-const STOPS_URL = 'https://data.pid.cz/stops/json/stops.json';
-// Todo: Read API from a config file
-const API_KEY = "YOUR_KEY";
-const API_URL = "https://api.golemio.cz/v2";
-const API_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'X-Access-Token': API_KEY
-};
+const timeLimitTillArrival = 10; // Show trams arriving within 10 minutes
 
-const STATION_ONE_ID = "U809Z1P";
-const STATION_TWO_ID = "U809Z2P";
-const STATION_THREE_ID = "U809Z4P";
-const TIME_LIMIT_TILL_ARRIVAL = 10; // Show trams arriving within 10 minutes
+// The passing string to the homewidget should be "station_num_1, arriving_tram_data_num_1"
+const String homeWidgetTramData = "arriving_tram_data_num_";
+const String homeWidgetStationNum = "station_num_";
+
+const String homeWidgetGroupId = "group.cz.litacka.tram_billboard";
+
+List<Map<String, String>> stationList = [
+  {'id': "", 'name': ""},
+  {'id': "", 'name': ""},
+  {'id': "", 'name': ""},
+];
+
+// Load station configurations from SharedPreferences
+Future<void> loadStationConfigs() async {
+  final prefs = await SharedPreferences.getInstance();
+  for (int i = 0; i < stationList.length; i++) {
+    final name = prefs.getString('station_${i}_name');
+    final id = prefs.getString('station_${i}_id');
+    if (name != null) stationList[i]['name'] = name;
+    if (id != null) stationList[i]['id'] = id;
+  }
+}
+
+// Save station configurations to SharedPreferences
+Future<void> saveStationConfigs() async {
+  final prefs = await SharedPreferences.getInstance();
+  for (int i = 0; i < stationList.length; i++) {
+    await prefs.setString('station_${i}_name', stationList[i]['name'] ?? '');
+    await prefs.setString('station_${i}_id', stationList[i]['id'] ?? '');
+  }
+}
+
+// Save API key to SharedPreferences
+Future<void> saveApiKey(String apiKey) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('api_key', apiKey);
+}
+
+// Load API key from SharedPreferences
+Future<String?> loadApiKey() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('api_key');
+}
+
+Future<void> loadAndApplyApiKey() async {
+  final savedApiKey = await loadApiKey();
+  if (savedApiKey != null && savedApiKey.isNotEmpty) {
+    pid.setApiKey(savedApiKey);
+  }
+}
 
 class Stop {
   final String? stopName;
@@ -30,120 +70,140 @@ class Stop {
   });
 }
 
-class ArrivalMetadata
-{
-  final String arrivingInMinutes;
-  final String tramNumber;
+final pid = LitackaEndpointParser();
 
-  ArrivalMetadata({
-    required this.arrivingInMinutes,
-    required this.tramNumber,
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+
+    bool ret = false;
+
+    WidgetsFlutterBinding.ensureInitialized();
+
+    await HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
+
+    await loadStationConfigs();
+    await loadAndApplyApiKey();
+
+    if (task == "refreshTrams") {
+      ret = await _updateWidget();
+    }
+
+    return Future.value(ret);
   });
 }
 
-class PID {
+@pragma('vm:entry-point')
+Future<void> interactiveCallback(Uri? uri) async {
+  
+  debugPrint('Background callback triggered - updating widget data jejeje');
+  
+  if (uri?.host == 'refresh') {
+    debugPrint("refresh action received from widget, using workmanager to update widget data in background");
 
-  /// Fetch stops from API and return a list of stop details filtered by zone_id = "P".
-  // Future<List<Stop>> getAllStops({String? stopName}) async {
-  //   try {
-  //     final uri = Uri.parse('$API_URL/gtfs/stops').replace(
-  //       queryParameters: stopName != null && stopName.isNotEmpty ? {'names': stopName} : {},
-  //     );
-  //     final resp = await http.get(uri, headers: API_HEADERS).timeout(const Duration(seconds: 5));
-  //     if (resp.statusCode != 200) {
-  //       print('getAllStops HTTP ${resp.statusCode}');
-  //       return [];
-  //     }
-  //     print('getAllStops response: ${resp.body}');
-  //     final jsonString = utf8.decode(resp.bodyBytes);
-  //     final decoded = jsonDecode(jsonString);
-
-  //     final List<Stop> stopsList = [];
-      
-  //     // Handle features array
-  //     if (decoded is Map<String, dynamic> && decoded['features'] is List) {
-  //       final features = decoded['features'] as List<dynamic>;
-  //       for (final stop in features) {
-  //         final Map<String, dynamic> properties = 
-  //             (stop is Map<String, dynamic> && stop['properties'] is Map<String, dynamic>)
-  //                 ? (stop['properties'] as Map<String, dynamic>)
-  //                 : (stop is Map<String, dynamic> ? stop : <String, dynamic>{});
-
-  //         // Filter by zone_id = "P"
-  //         final zoneId = properties['zone_id']?.toString();
-  //         if (zoneId != 'P') continue;
-
-  //         final name = properties['stop_name']?.toString();
-  //         final id = properties['stop_id']?.toString();
-  //         final platformCode = properties['platform_code']?.toString();
-
-  //         if (name != null && name.isNotEmpty && id != null && id.isNotEmpty) {
-  //           stopsList.add(Stop(
-  //             stopName: name,
-  //             stopId: id,
-  //             platformCode: platformCode,
-  //           ));
-  //         }
-  //       }
-  //     }
-
-  //     return stopsList;
-  //   } catch (e) {
-  //     print('Error fetching stops: $e');
-  //     return [];
-  //   }
-  // }
-
-  Future<List<ArrivalMetadata>> getArrivalsForStop(String stopID, int minutesBefore, int minutesAfter) async
-  {
-    final List<ArrivalMetadata> arrivals = [];
-    try {
-      // Fetch departure board data
-      final url = Uri.parse('$API_URL/pid/departureboards').replace(
-        queryParameters: {
-          'ids': stopID,
-          'limit': '5',
-          'minutesBefore': minutesBefore.toString(),
-          'minutesAfter': minutesAfter.toString(),
-          'mode': 'arrivals',
-        },
-      );
-      
-      final resp = await http.get(url, headers: API_HEADERS).timeout(const Duration(seconds: 5));
-      if (resp.statusCode != 200) {
-        print('getArrivalsForStop HTTP ${resp.statusCode}');
-        return [];
-      }
-      // print('getArrivalsForStop response: ${resp.body}');
-      final jsonString = utf8.decode(resp.bodyBytes);
-      final boardData = jsonDecode(jsonString) as Map<String, dynamic>;
-      
-      // Parse departure board data
-      final departures = boardData['departures'] as List<dynamic>? ?? [];
-      for (final departure in departures) {
-        final route = (departure is Map<String, dynamic>) ? departure['route'] as Map<String, dynamic>? : null;
-        final departureTimestamp = (departure is Map<String, dynamic>) ? departure['departure_timestamp'] as Map<String, dynamic>? : null;
-        
-        final tramNumber = route?['short_name']?.toString()??'';
-        final minutesUntilArrival = departureTimestamp?['minutes'];
-        
-        // if (tramNumber != null && minutesUntilArrival != null && minutesUntilArrival is int) {
-          arrivals.add(ArrivalMetadata(
-            arrivingInMinutes: minutesUntilArrival,
-            tramNumber: tramNumber,
-          ));
-        // }
-      }
-      
-      return arrivals;
-    } catch (e) {
-      print('Error fetching arrivals for stop $stopID: $e');
-      return [];
-    }
+    await Workmanager().registerOneOffTask(
+      DateTime.now().millisecondsSinceEpoch.toString(),
+      "refreshTrams",
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
   }
 }
 
-void main() {
+/// Updates widget data in background without opening the app
+Future<bool> _updateWidget() async {
+  String? errorMessage;
+  bool flagFetch = false;
+  bool res = true;
+
+  try {
+
+    await loadStationConfigs();
+    await loadAndApplyApiKey();
+
+    for (var stopsIndex = 0; stopsIndex < stationList.length; stopsIndex++) {
+      final station = stationList[stopsIndex];
+      final stationId = station['id'];
+
+      if (stationId == null || stationId.isEmpty) {
+        continue;
+      }
+
+      debugPrint('Background fetch: Fetching arrivals for ${station['name']}');
+
+      try {
+        final arrivals = await pid.getArrivalsForStop(
+          stationId,
+          0,
+          timeLimitTillArrival,
+        );
+
+        debugPrint('Background fetch: Got ${arrivals.length} arrivals');
+
+        // Save station name
+        final stationName = station['name'] ?? 'Unknown';
+        await HomeWidget.saveWidgetData('station_name_${stopsIndex + 1}', stationName);
+
+        // Save tram arrival data
+        for (var tramData = 0; tramData < numberOfWidgetRowsPerStation; tramData++) {
+          final tramArrivalParsedData = arrivals.length > tramData
+              ? 'Tram ${arrivals[tramData].tramNumber} in ${arrivals[tramData].arrivingInMinutes} min'
+              : '';
+
+          final widgetKey =
+              '$homeWidgetStationNum${stopsIndex + 1},$homeWidgetTramData${tramData + 1}';
+
+          if (tramArrivalParsedData == '' && flagFetch == false) {
+            flagFetch = false;
+            debugPrint('Background fetch: No data for tram ${tramData + 1} at station ${station['name']}');
+          } else {
+            flagFetch = true;
+            debugPrint('Background fetch: Saving data for tram ${tramData + 1} at station ${station['name']}: $tramArrivalParsedData');
+          }
+
+          if (flagFetch) {
+            await HomeWidget.saveWidgetData(widgetKey, tramArrivalParsedData);
+          }
+        }
+      } catch (stationError) {
+        errorMessage = 'Error: $stationError';
+        debugPrint('Background fetch error: $errorMessage');
+      }
+    }
+
+    // Save refresh timestamp
+    if (flagFetch) {
+      final now = DateTime.now();
+      final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      await HomeWidget.saveWidgetData('last_updated_time', formattedTime);
+    }
+
+    // Update widget display
+    await HomeWidget.updateWidget(
+      androidName: 'TramAlertWidget',
+      iOSName: 'TramAlertWidget',
+    );
+
+    debugPrint('Background update complete');
+  } catch (e) {
+    res = false;
+    debugPrint('Fatal error in background update: $e');
+  }
+
+  return res;
+}
+
+/// Main app widget that displays the arrival times for the configured stations and updates the home screen widget data.
+void main(){
+
+  WidgetsFlutterBinding.ensureInitialized();
+  HomeWidget.setAppGroupId('group.cz.renato.tram_alert');
+
+  Workmanager().initialize(
+    callbackDispatcher,
+  );
+
+  HomeWidget.registerInteractivityCallback(interactiveCallback);
+
   runApp(MaterialApp(home: MainApp()));
 }
 
@@ -155,149 +215,207 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  bool _loading = true;
-  String? _error;
-  List<ArrivalMetadata> _arrivals = [];
-  late Timer _timer;
 
-  // Home widget configuration
-  String appGroupId = 'group.cz.renato.tram_alert';
-  String androidWidgetName = 'TramAlertWidget';
-  String iosWidgetName = 'TramAlertWidget';
-  String tramData_1 = "arriving_Trams_1";
-  String tramData_2 = "arriving_Trams_2";
-  String tramData_3 = "arriving_Trams_3";
-  String tramData_4 = "arriving_Trams_4";
-
-  int counter = 1;
+  final TextEditingController _apiKeyController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _initializeApp();
-
-    HomeWidget.setAppGroupId(appGroupId);
   }
 
   Future<void> _initializeApp() async {
     try {
-      // Print configuration
-      print('Station IDs:');
-      print('  STATION_ONE_ID: $STATION_ONE_ID');
-      print('  STATION_TWO_ID: $STATION_TWO_ID');
-      print('  STATION_THREE_ID: $STATION_THREE_ID');
-      print('Time limit till arrival: $TIME_LIMIT_TILL_ARRIVAL minutes');
+      // Load saved station configurations
+      await loadStationConfigs();
+      
+      // Load saved API key
+      final savedApiKey = await loadApiKey();
+      if (savedApiKey != null && savedApiKey.isNotEmpty) {
+        _apiKeyController.text = savedApiKey;
+        await loadAndApplyApiKey();
+        debugPrint('API key loaded from storage');
+      }
+      
+      // debugPrint configuration
+      debugPrint('Station IDs:');
+      for (final station in stationList) {
+        debugPrint('  ${station['name']}: ${station['id']}');
+      }
+      debugPrint('Time limit till arrival: $timeLimitTillArrival minutes');
       
       if (!mounted) {
         return;
       }
-      setState(() {
-        _loading = false;
-      });
 
-      // Start timer to update arrivals every 10 seconds
-      _timer = Timer.periodic(Duration(seconds: 10), (_) {
-        _fetchArrivals();
-      });
+      setState(() {});
 
-      // Fetch arrivals immediately
-      await _fetchArrivals();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        // Handle error state
       });
-    }
-  }
-
-  Future<void> _fetchArrivals() async {
-    try {
-      final arrivals = await PID().getArrivalsForStop(
-        STATION_ONE_ID,
-        0,
-        TIME_LIMIT_TILL_ARRIVAL,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _arrivals = arrivals;
-      });
-
-      // Update home widget with new arrivals
-      String arrivalText = arrivals.isEmpty
-          ? 'No trams arriving'
-          : 'Tram ${arrivals.first.tramNumber} in ${arrivals.first.arrivingInMinutes} min';
-      print("Updating widget with arrivals:\n$arrivalText");
-      // counter++;
-      await HomeWidget.saveWidgetData(tramData_1, arrivalText);
-      await HomeWidget.updateWidget(androidName: androidWidgetName, iOSName: iosWidgetName,);
-
-    } catch (e) {
-      print('Error fetching arrivals: $e');
     }
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: _loading
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
-                  Text('Loading...'),
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('PID Litacka Tram Alert Configuration')),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                const Text("Enter your API key here:", style: TextStyle(fontSize: 18)),
+                const SizedBox(height: 10),
+
+                TextField(
+                  obscureText: true,
+                  controller: _apiKeyController,
+                  onChanged: (value) async {
+                    debugPrint('API key entered: $value');
+                    pid.setApiKey(value);
+                    await saveApiKey(value);
+                  },
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'API Key',
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                const Text("Stops configuration:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text("Enter stops names and IDs below", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                
+                for (int i = 0; i < stationList.length; i++) ...[
+                  const SizedBox(height: 20),
+                  Text('Stop ${i + 1}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 10),
+                  
+                  TextField(
+                    controller: TextEditingController(text: stationList[i]['name']),
+                    onChanged: (value) {
+                      debugPrint('Stop ${i + 1} name: $value');
+                      stationList[i]['name'] = value;
+                    },
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: 'Stop ${i + 1} Name',
+                      hintText: 'e.g., Ujezd Dir: South',
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 10),
+                  
+                  TextField(
+                    controller: TextEditingController(text: stationList[i]['id']),
+                    onChanged: (value) {
+                      debugPrint('Stop ${i + 1} ID: $value');
+                      stationList[i]['id'] = value;
+                    },
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: 'Stop ${i + 1} ID',
+                      hintText: 'e.g., U809Z1P',
+                    ),
+                  ),
                 ],
-              )
-            : _error != null
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Error: $_error'),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Configuration:'),
-                      const SizedBox(height: 12),
-                      Text('Station 1: $STATION_ONE_ID'),
-                      Text('Station 2: $STATION_TWO_ID'),
-                      Text('Station 3: $STATION_THREE_ID'),
-                      const SizedBox(height: 12),
-                      Text('Time limit: $TIME_LIMIT_TILL_ARRIVAL minutes'),
-                      const SizedBox(height: 24),
-                      // Arrivals board for Station One
-                      Column(
-                        children: [
-                          Text('Station 1 - $STATION_ONE_ID',
-                              style: Theme.of(context).textTheme.headlineSmall),
-                          const SizedBox(height: 12),
-                          if (_arrivals.isEmpty)
-                            const Text('No trams arriving')
-                          else
-                            Column(
-                              children: _arrivals
-                                  .map((arrival) => Text(
-                                        'Tram ${arrival.tramNumber} arriving in ${arrival.arrivingInMinutes} minutes',
-                                      ))
-                                  .toList(),
-                            ),
-                        ],
+
+                const SizedBox(height: 30),
+                
+                Builder(
+                  builder: (BuildContext scaffoldContext) {
+                    return ElevatedButton(
+                      onPressed: () async {
+                        await saveStationConfigs();
+                        if (!mounted) return;
+                        setState(() {});
+                        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                          const SnackBar(content: Text('Station configurations saved!')),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       ),
+                      child: const Text('Save Configurations', style: TextStyle(fontSize: 16)),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 40),
+                const Divider(thickness: 2),
+                const SizedBox(height: 20),
+                
+                const Text("Current Configuration:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'API Key:',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _apiKeyController.text.isNotEmpty 
+                          ? '${_apiKeyController.text.substring(
+                              0,
+                              _apiKeyController.text.length > 5 ? 5 : _apiKeyController.text.length,
+                            )}*****'
+                          : 'Not set',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 12),
+                      Divider(color: Colors.grey[300], height: 1),
+                      const SizedBox(height: 12),
+                      for (int i = 0; i < stationList.length; i++) ...[
+                        Text(
+                          'Stop ${i + 1}:',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Name: ${stationList[i]['name']?.isNotEmpty == true ? stationList[i]['name'] : 'Not set'}',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'ID: ${stationList[i]['id']?.isNotEmpty == true ? stationList[i]['id'] : 'Not set'}',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                        ),
+                        if (i < stationList.length - 1) ...[
+                          const SizedBox(height: 12),
+                          Divider(color: Colors.grey[300], height: 1),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
                     ],
                   ),
+                ),
+                
+                const SizedBox(height: 20),
+
+              ],
+            ),
+          ),
+        )
       ),
     );
   }
