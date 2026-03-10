@@ -9,6 +9,8 @@ A Flutter app + Android home widget that shows upcoming tram departures from sel
 	</tr>
 </table>
 
+---
+
 ## Features
 
 - Configure up to 3 stops (`name` + `stop ID`) from the app UI
@@ -34,13 +36,11 @@ A Flutter app + Android home widget that shows upcoming tram departures from sel
 This app uses the Golemio transport API endpoint (`/v2/pid/departureboards`) and requires an access token.
 
 1. Open Golemio developer portal:
-	- https://api.golemio.cz/
+	- https://api.golemio.cz/api-keys
 2. Create an account / sign in.
 3. Create an API token (access token).
 4. Copy the token and paste it into the app field **API Key**.
 5. Press **Save Configurations**.
-
-The app stores this key locally on your device, so it persists across app restarts and phone reboots.
 
 ---
 
@@ -50,6 +50,9 @@ You can look up PID stop IDs from the official stops dataset:
 
 - Stops dataset (JSON):
   - https://data.pid.cz/stops/json/stops.json
+
+- You can also check the stop plataform here (each stop plataform has a different stop id):
+  - https://mapa.pid.cz/
 
 How to use it:
 
