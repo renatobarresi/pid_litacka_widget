@@ -2,8 +2,12 @@
 
 A Flutter app + Android home widget that shows upcoming tram departures from selected PID stops.
 
-![android widget](./assets/for_readme/widget_working.gif)(.image25percent)
-![app](./assets/for_readme/app.jpeg)(.image25percent)
+<table>
+	<tr>
+		<td align="center"><img src="./assets/for_readme/widget_working.gif" alt="android widget" width="220" /></td>
+		<td align="center"><img src="./assets/for_readme/app.jpeg" alt="app" width="220" /></td>
+	</tr>
+</table>
 
 ## Features
 
