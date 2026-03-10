@@ -42,8 +42,6 @@ This app uses the Golemio transport API endpoint (`/v2/pid/departureboards`) and
 4. Copy the token and paste it into the app field **API Key**.
 5. Press **Save Configurations**.
 
-The app stores this key locally on your device, so it persists across app restarts and phone reboots.
-
 ---
 
 ## Where to find stop IDs
